@@ -380,11 +380,14 @@ type mSpanList struct {
 
 //go:notinheap
 type mspan struct {
+	// 双向链表
 	next *mspan     // next span in list, or nil if none
 	prev *mspan     // previous span in list, or nil if none
 	list *mSpanList // For debugging. TODO: Remove.
 
+	// 起始地址
 	startAddr uintptr // address of first byte of span aka s.base()
+	// 每个span管理的页数 每个页大小是8KB
 	npages    uintptr // number of pages in span
 
 	manualFreeList gclinkptr // list of free objects in mSpanManual spans
@@ -415,6 +418,7 @@ type mspan struct {
 	// ctz (count trailing zero) to use it directly.
 	// allocCache may contain bits beyond s.nelems; the caller must ignore
 	// these.
+	// bitmap存储空闲的内存块
 	allocCache uint64
 
 	// allocBits and gcmarkBits hold pointers to a span's mark and
@@ -905,8 +909,10 @@ func (h *mheap) alloc(npages uintptr, spanclass spanClass, needzero bool) *mspan
 		// To prevent excessive heap growth, before allocating n pages
 		// we need to sweep and reclaim at least n pages.
 		if h.sweepdone == 0 {
+			// 首先释放一部分内存 防止内存和堆的增长
 			h.reclaim(npages)
 		}
+		// 在堆上申请 npages 数量的内存页并初始化 runtime.mspan
 		s = h.allocSpan(npages, spanAllocHeap, spanclass)
 	})
 
@@ -1135,6 +1141,7 @@ func (h *mheap) allocSpan(npages uintptr, typ spanAllocType, spanclass spanClass
 	// The page cache does not support aligned allocations, so we cannot use
 	// it if we need to provide a physical page aligned stack allocation.
 	pp := gp.m.p.ptr()
+	// 先从缓存取
 	if !needPhysPageAlign && pp != nil && npages < pageCachePages/4 {
 		c := &pp.pcache
 
@@ -1168,8 +1175,10 @@ func (h *mheap) allocSpan(npages uintptr, typ spanAllocType, spanclass spanClass
 
 	if base == 0 {
 		// Try to acquire a base address.
+		// 在页堆上申请
 		base, scav = h.pages.alloc(npages)
 		if base == 0 {
+			// 还申请不到，则进行扩容内存
 			if !h.grow(npages) {
 				unlock(&h.lock)
 				return nil

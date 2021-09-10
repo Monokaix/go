@@ -62,11 +62,13 @@ type Map struct {
 // readOnly is an immutable struct stored atomically in the Map.read field.
 type readOnly struct {
 	m       map[interface{}]*entry
+	// 初始时为false，代表一部分数据在dirty map而没在m中
 	amended bool // true if the dirty map contains some key not in m.
 }
 
 // expunged is an arbitrary pointer that marks entries which have been deleted
 // from the dirty map.
+// 代表数据已经从dirty map删除
 var expunged = unsafe.Pointer(new(interface{}))
 
 // An entry is a slot in the map corresponding to a particular key.
@@ -99,9 +101,12 @@ func newEntry(i interface{}) *entry {
 // Load returns the value stored in the map for a key, or nil if no
 // value is present.
 // The ok result indicates whether value was found in the map.
+// load时，若readonly存在，则直接返回
 func (m *Map) Load(key interface{}) (value interface{}, ok bool) {
 	read, _ := m.read.Load().(readOnly)
 	e, ok := read.m[key]
+	// readonly map不存在且dirty map里有多余的数据 此时从dirty map里取
+	// 这里走的是慢路径
 	if !ok && read.amended {
 		m.mu.Lock()
 		// Avoid reporting a spurious miss if m.dirty got promoted while we were
@@ -110,17 +115,21 @@ func (m *Map) Load(key interface{}) (value interface{}, ok bool) {
 		read, _ = m.read.Load().(readOnly)
 		e, ok = read.m[key]
 		if !ok && read.amended {
+			// 判断是否从dirty map里取到了数据
 			e, ok = m.dirty[key]
 			// Regardless of whether the entry was present, record a miss: this key
 			// will take the slow path until the dirty map is promoted to the read
 			// map.
+			// 计算缺失次数，若缺失次数超过dirty map大小，将dirty map全部数据转移到read only map，并清空dirty map
 			m.missLocked()
 		}
 		m.mu.Unlock()
 	}
+	// dirty map也不存在
 	if !ok {
 		return nil, false
 	}
+	// 返回真正的数据，从readonly map或者dirty map里取到的数据
 	return e.load()
 }
 
@@ -134,6 +143,7 @@ func (e *entry) load() (value interface{}, ok bool) {
 
 // Store sets the value for a key.
 func (m *Map) Store(key, value interface{}) {
+	// 数据在readonly map存在，直接存放到readonly map
 	read, _ := m.read.Load().(readOnly)
 	if e, ok := read.m[key]; ok && e.tryStore(&value) {
 		return
@@ -154,9 +164,13 @@ func (m *Map) Store(key, value interface{}) {
 		if !read.amended {
 			// We're adding the first new key to the dirty map.
 			// Make sure it is allocated and mark the read-only map as incomplete.
+			// 添加第一个key的逻辑是这里
+			// 会把readonly map的值复制到dirty map
 			m.dirtyLocked()
+			// amended变量置为true，表示dirty map里有read中不存在的数据
 			m.read.Store(readOnly{m: read.m, amended: true})
 		}
+		// 把数据先存到dirty map中
 		m.dirty[key] = newEntry(value)
 	}
 	m.mu.Unlock()
@@ -353,6 +367,7 @@ func (m *Map) missLocked() {
 	if m.misses < len(m.dirty) {
 		return
 	}
+	// dirty map里的值集中转移到readonly map
 	m.read.Store(readOnly{m: m.dirty})
 	m.dirty = nil
 	m.misses = 0
@@ -364,6 +379,7 @@ func (m *Map) dirtyLocked() {
 	}
 
 	read, _ := m.read.Load().(readOnly)
+	// 会把readonly map中的数据复制到dirty map
 	m.dirty = make(map[interface{}]*entry, len(read.m))
 	for k, e := range read.m {
 		if !e.tryExpungeLocked() {

@@ -17,6 +17,7 @@ import (
 // must be specially handled.
 //
 //go:notinheap
+// 线程缓存
 type mcache struct {
 	// The following members are accessed on every malloc,
 	// so they are grouped here for better caching.
@@ -159,6 +160,7 @@ func (c *mcache) refill(spc spanClass) {
 	}
 
 	// Get a new cached span from the central lists.
+	// 从中心缓存申请runtime.span存储到线程缓存
 	s = mheap_.central[spc].mcentral.cacheSpan()
 	if s == nil {
 		throw("out of memory")
