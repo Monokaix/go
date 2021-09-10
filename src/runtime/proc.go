@@ -333,6 +333,7 @@ func gopark(unlockf func(*g, unsafe.Pointer) bool, lock unsafe.Pointer, reason w
 	mp.waittraceskip = traceskip
 	releasem(mp)
 	// can't do anything that might move the G between Ms here.
+	// 让出处理器使用权
 	mcall(park_m)
 }
 
@@ -3315,6 +3316,7 @@ func park_m(gp *g) {
 			execute(gp, true) // Schedule it back, never returns.
 		}
 	}
+	// 调度执行其他可以执行的goroutine
 	schedule()
 }
 
