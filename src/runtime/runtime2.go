@@ -206,6 +206,7 @@ type iface struct {
 }
 
 type eface struct {
+	// 这个_type就是各种类型的运行时表示
 	_type *_type
 	data  unsafe.Pointer
 }
@@ -858,11 +859,15 @@ type funcinl struct {
 // allocated in non-garbage-collected memory
 // Needs to be in sync with
 // ../cmd/compile/internal/gc/reflect.go:/^func.dumptabs.
+// 具体类型和接口类型的组合
 type itab struct {
 	inter *interfacetype
+	// 这个就是具体实现了interface的struct类型
 	_type *_type
+	// _type.hash的拷贝。在将interface转换为具体类型时，用于快速判断要转换到的类型和本身的类型是否一致
 	hash  uint32 // copy of _type.hash. Used for type switches.
 	_     [4]byte
+	// 具体的实现方法 按字典序排列
 	fun   [1]uintptr // variable sized. fun[0]==0 means _type does not implement inter.
 }
 

@@ -31,6 +31,7 @@ const (
 type _type struct {
 	size       uintptr
 	ptrdata    uintptr // size of memory prefix holding all pointers
+	// 用于快速判断类型是否相等
 	hash       uint32
 	tflag      tflag
 	align      uint8
@@ -364,8 +365,10 @@ type imethod struct {
 }
 
 type interfacetype struct {
+	// 这个typ就是interface本身这个类型
 	typ     _type
 	pkgpath name
+	// 这里是interface本身声明的函数抽象，不包括具体的函数实现
 	mhdr    []imethod
 }
 

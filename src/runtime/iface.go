@@ -315,6 +315,7 @@ var (
 // The convXXX functions succeed on a nil input, whereas the assertXXX
 // functions fail on a nil input.
 
+// 编译时将struct转换成空的接口类型 elem是传进来的struct
 func convT2E(t *_type, elem unsafe.Pointer) (e eface) {
 	if raceenabled {
 		raceReadObjectPC(t, elem, getcallerpc(), funcPC(convT2E))
@@ -326,7 +327,9 @@ func convT2E(t *_type, elem unsafe.Pointer) (e eface) {
 	// TODO: We allocate a zeroed object only to overwrite it with actual data.
 	// Figure out how to avoid zeroing. Also below in convT2Eslice, convT2I, convT2Islice.
 	typedmemmove(t, x, elem)
+	// 空接口的_type字段
 	e._type = t
+	// 空接口的数据字段
 	e.data = x
 	return
 }
@@ -402,6 +405,7 @@ func convT2Enoptr(t *_type, elem unsafe.Pointer) (e eface) {
 	return
 }
 
+// 编译时会将实现了接口的struct转换成interface类型
 func convT2I(tab *itab, elem unsafe.Pointer) (i iface) {
 	t := tab._type
 	if raceenabled {
