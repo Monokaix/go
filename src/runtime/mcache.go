@@ -44,6 +44,7 @@ type mcache struct {
 
 	alloc [numSpanClasses]*mspan // spans to allocate from, indexed by spanClass
 
+	// 每个线程的栈缓存，分配时从本地缓存取，避免全局锁的竞争
 	stackcache [_NumStackOrders]stackfreelist
 
 	// flushGen indicates the sweepgen during which this mcache

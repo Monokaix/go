@@ -138,6 +138,7 @@ const (
 // Stacks are assigned an order according to size.
 //     order = log_2(size/FixedStack)
 // There is a free list for each order.
+// 分配小于32KB的栈
 var stackpool [_NumStackOrders]struct {
 	item stackpoolItem
 	_    [cpu.CacheLinePadSize - unsafe.Sizeof(stackpoolItem{})%cpu.CacheLinePadSize]byte
@@ -150,6 +151,7 @@ type stackpoolItem struct {
 }
 
 // Global pool of large stack spans.
+// 分配超过32KB的大栈
 var stackLarge struct {
 	lock mutex
 	free [heapAddrBits - pageShift]mSpanList // free lists by log_2(s.npages)
@@ -360,6 +362,7 @@ func stackalloc(n uint32) stack {
 			n2 >>= 1
 		}
 		var x gclinkptr
+		// 从缓存中取
 		if stackNoCache != 0 || thisg.m.p == 0 || thisg.m.preemptoff != "" {
 			// thisg.m.p == 0 can happen in the guts of exitsyscall
 			// or procresize. Just get a stack from the global pool.
@@ -369,6 +372,7 @@ func stackalloc(n uint32) stack {
 			x = stackpoolalloc(order)
 			unlock(&stackpool[order].item.mu)
 		} else {
+			// 缓存不够，调用stackcacherefill从堆上获取新的内存
 			c := thisg.m.p.ptr().mcache
 			x = c.stackcache[order].list
 			if x.ptr() == nil {
